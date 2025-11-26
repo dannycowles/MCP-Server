@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.fastmcp.prompts import base
 from pydantic import Field
 
@@ -18,12 +18,12 @@ docs = {
     name="read_doc_contents",
     description="Read the contents of a document and return it as a string.",
 )
-def read_document(
-        doc_id: str = Field(description="Id of the document to read")
-):
+async def read_document(
+        doc_id: str = Field(description="Id of the document to read"), ctx: Context = None
+) -> str:
     if doc_id not in docs:
         raise ValueError(f"Document with id {doc_id} not found")
-
+    await ctx.info(f"Reading content from {doc_id}")
     return docs[doc_id]
 
 
@@ -40,6 +40,33 @@ def edit_document(
         raise ValueError(f"Document with id {doc_id} not found")
 
     docs[doc_id] = docs[doc_id].replace(old_str, new_str)
+
+
+@mcp.tool(
+    name="read_file",
+    description="Read the contents of a file and return it as a string.",
+)
+def read_file(
+        file_name: str = Field(description="The name of the file to read.")
+) -> str:
+    try:
+        with open(file_name, "r") as file:
+            content = file.read()
+            return content
+    except FileNotFoundError:
+        raise ValueError(f"File {file_name} not found")
+
+
+@mcp.tool(
+    name="edit_file",
+    description="Edit a file by appending the provided text to the end of the file"
+)
+def edit_file(
+        file_name: str = Field(description="The name of the file to edit."),
+        new_text: str = Field(description="The new text to append to the end of the file.")
+):
+    with open(file_name, "a") as file:
+        file.write(new_text)
 
 
 @mcp.resource(
