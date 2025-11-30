@@ -1,6 +1,17 @@
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.fastmcp.prompts import base
 from pydantic import Field
+from dotenv import load_dotenv
+import os
+import psycopg2
+
+load_dotenv()
+
+db_host = os.getenv("DB_HOST")
+db_name = os.getenv("DB_NAME")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+
 
 mcp = FastMCP("DocumentMCP", log_level="ERROR")
 
@@ -67,6 +78,106 @@ def edit_file(
 ):
     with open(file_name, "a") as file:
         file.write(new_text)
+
+
+@mcp.tool(
+    name="read_todos",
+    description="Read the contents of the todos database table and return as a list of dictionaries"
+)
+def read_todos() -> list[dict]:
+    conn = psycopg2.connect(
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password
+    )
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM todos")
+
+    todos = []
+    for row in cursor.fetchall():
+        todos.append({
+            "id": row[0],
+            "title": row[1],
+            "description": row[2],
+            "is_completed": row[3],
+            "created_at": row[4]
+        })
+
+    cursor.close()
+    conn.close()
+    return todos
+
+
+@mcp.tool(
+    name="add_todo",
+    description="Add a new todo item to the database."
+)
+def add_todo(
+        title: str = Field(description="Title of the todo item"),
+        description: str | None = Field(default=None, description="Longer description if needed")
+):
+    conn = psycopg2.connect(
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password
+    )
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO todos (title, description) VALUES (%s, %s)", (title, description))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+@mcp.tool(
+    name="complete_todo",
+    description="Mark todo item as completed in the database"
+)
+def complete_todo(
+        title: str = Field(description="Title of the todo item being marked as completed")
+):
+    conn = psycopg2.connect(
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password
+    )
+    cursor = conn.cursor()
+    cursor.execute("UPDATE todos SET completed = TRUE WHERE title = %s", (title,))
+    conn.commit()
+
+    updated_rows = cursor.rowcount
+    cursor.close()
+    conn.close()
+
+    if updated_rows == 0:
+        raise ValueError(f"Todo item with title {title} was not found")
+
+
+@mcp.tool(
+    name="delete_todo",
+    description="Deletes a todo item from the database"
+)
+def delete_todo(
+        title: str = Field(description="Title of the todo item being deleted from the database")
+):
+    conn = psycopg2.connect(
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password
+    )
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM todos WHERE title = %s", (title,))
+    conn.commit()
+
+    updated_rows = cursor.rowcount
+    cursor.close()
+    conn.close()
+
+    if updated_rows == 0:
+        raise ValueError(f"Todo item with title {title} was not found")
 
 
 @mcp.resource(
