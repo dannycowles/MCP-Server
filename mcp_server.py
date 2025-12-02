@@ -4,6 +4,7 @@ from pydantic import Field
 from dotenv import load_dotenv
 import os
 import psycopg2
+import requests
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ db_password = os.getenv("DB_PASSWORD")
 
 mcp = FastMCP("DocumentMCP", log_level="ERROR")
 
+WEATHER_API_URL = "https://api.weather.gov"
 
 docs = {
     "deposition.md": "This deposition covers the testimony of Angela Smith, P.E.",
@@ -178,6 +180,35 @@ def delete_todo(
 
     if updated_rows == 0:
         raise ValueError(f"Todo item with title {title} was not found")
+
+
+@mcp.tool(
+    name="get_weather_alerts",
+    description="Get active weather alerts for a specific US state (e.g. 'CA', 'NY')"
+)
+def get_weather_alerts(
+        state: str = Field(description="State of the weather alerts to get data for")
+) -> list[dict]:
+    try:
+        response = requests.get(f"{WEATHER_API_URL}/alerts/active/area/{state}")
+        response.raise_for_status()
+
+        features = response.json()["features"]
+        alerts = [format_weather_alert(feature) for feature in features]
+        return alerts
+    except Exception as e:
+        raise ValueError(f"Error fetching weather alerts for {state}: {str(e)}")
+
+
+def format_weather_alert(feature: dict):
+    alert_properties = feature.get("properties")
+    return {
+        "Event": alert_properties.get("event", "Unknown"),
+        "Area": alert_properties.get("areaDesc", "Unknown"),
+        "Severity": alert_properties.get("severity", "Unknown"),
+        "Description": alert_properties.get("description", "Unknown"),
+        "Instruction": alert_properties.get("instruction", "Unknown")
+    }
 
 
 @mcp.resource(
