@@ -194,21 +194,54 @@ def get_weather_alerts(
         response.raise_for_status()
 
         features = response.json()["features"]
-        alerts = [format_weather_alert(feature) for feature in features]
+        alerts = []
+
+        for feature in features:
+            alert_properties = feature.get("properties")
+            alerts.append({
+                "Event": alert_properties.get("event", "Unknown"),
+                "Area": alert_properties.get("areaDesc", "Unknown"),
+                "Severity": alert_properties.get("severity", "Unknown"),
+                "Description": alert_properties.get("description", "Unknown"),
+                "Instruction": alert_properties.get("instruction", "Unknown")
+            })
         return alerts
     except Exception as e:
         raise ValueError(f"Error fetching weather alerts for {state}: {str(e)}")
 
 
-def format_weather_alert(feature: dict):
-    alert_properties = feature.get("properties")
-    return {
-        "Event": alert_properties.get("event", "Unknown"),
-        "Area": alert_properties.get("areaDesc", "Unknown"),
-        "Severity": alert_properties.get("severity", "Unknown"),
-        "Description": alert_properties.get("description", "Unknown"),
-        "Instruction": alert_properties.get("instruction", "Unknown")
-    }
+@mcp.tool(
+    name="get_weather_forecast",
+    description="Get weather forecast for a given latitude/longitude point in the US"
+)
+def get_weather_forecast(
+        latitude: float = Field(description="Latitude of the weather forecast to get data for"),
+        longitude: float = Field(description="Longitude of the weather forecast to get data for")
+) -> list[dict]:
+    try:
+        # Retrieve the gridpoint URL for the provided coordinates
+        response = requests.get(f"{WEATHER_API_URL}/points/{latitude},{longitude}")
+        response.raise_for_status()
+        forecast_url = response.json()["properties"]["forecast"]
+
+        # Retrieve the forecast information and format it to be sent back
+        response = requests.get(forecast_url)
+        response.raise_for_status()
+        forecast_periods = response.json()["properties"]["periods"]
+
+        forecast = []
+        for period in forecast_periods:
+            precipitation = period.get("probabilityOfPrecipitation", {})
+            forecast.append({
+                "Name": period.get("name", "Unknown"),
+                "Temperature": f"{period.get("temperature", "Unknown")} {period.get("temperatureUnit", "Unknown")}",
+                "Rain Chance": f"{precipitation.get("value", "Unknown")} {precipitation.get("unitCode", "Unknown")}",
+                "Wind": f"{period.get("windSpeed", "Unknown")} {period.get("windDirection", "Unknown")}",
+                "detailedForecast": period.get("detailedForecast", "Unknown")
+            })
+        return forecast
+    except Exception as e:
+        raise ValueError(f"Error fetching weather forecast for {latitude}, {longitude}: {str(e)}")
 
 
 @mcp.resource(
